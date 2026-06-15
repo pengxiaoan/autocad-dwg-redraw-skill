@@ -1,0 +1,4 @@
+interface:
+  display_name: "AutoCAD DWG Redraw"
+  short_description: "Rebuild, validate, and record AutoCAD DWG drawings."
+  default_prompt: "Use $autocad-dwg-redraw to rebuild a source DWG, validate entity counts, and optionally record the redraw process."

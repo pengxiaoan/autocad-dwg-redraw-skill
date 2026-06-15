@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.dwg
+*.dwl
+*.dwl2
+*.mp4
+outputs/
+node_modules/
