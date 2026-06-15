@@ -1,11 +1,14 @@
 ---
 name: autocad-dwg-redraw
-description: Rebuild, validate, and screen-record AutoCAD DWG drawings using AutoCAD COM automation. Use when Codex needs to reproduce a source .dwg as a new DWG, extract drawing metadata, compare ModelSpace entity counts, create video-friendly redraw demos, or guide users through DWG-to-DXF/DATAEXTRACTION workflows for precise AutoCAD reconstruction.
+description: Create standardized custom redraw prompts for AutoCAD DWG files, then rebuild, validate, and screen-record DWG redraws using AutoCAD COM automation. Use when Codex is given any source .dwg and must profile it, generate a drawing-specific redraw prompt, reproduce it as a new DWG, compare entity counts, or create a video-friendly redraw demo.
 ---
 
 # AutoCAD DWG Redraw
 
-Use this skill to reproduce an existing AutoCAD drawing as a new DWG and, when needed, record the redraw process for demonstrations.
+Use this skill in two stages:
+
+1. Generate a standardized drawing-specific redraw prompt from a source DWG.
+2. Use that prompt and the bundled redraw script to rebuild, validate, and optionally record the DWG.
 
 ## Core Rule
 
@@ -13,24 +16,44 @@ Do not infer a complex DWG from screenshots or visual style alone when the sourc
 
 For final delivery, prefer exact entity copy. For videos, use batch redraw with delays, then clearly label it as a demonstration copy.
 
-## Workflow
+## Standard User Flow
 
-1. Confirm AutoCAD is installed and can open the source DWG.
-2. Inspect the prompt/reference file if provided. Pay attention to required layers, blocks, title blocks, BOM tables, linetypes, text styles, dimensions, and encoding notes.
-3. Open the source DWG in AutoCAD or let the script open it.
-4. Generate a final accurate DWG with exact mode:
+When the user provides only a DWG, follow this repeatable flow:
+
+1. **Profile the source DWG**
+   ```powershell
+   python path\to\scripts\dwg_prompt_builder.py --source input.dwg --output input-redraw-prompt.md
+   ```
+2. **Review the generated custom prompt**
+   Confirm drawing name, entity counts, layers, blocks, text styles, dimension styles, and risk notes.
+3. **Create the final accurate redraw**
    ```powershell
    python path\to\scripts\dwg_redraw.py --source input.dwg --output outputs\redraw_exact.dwg --exact
    ```
-5. Validate at minimum:
-   - Source ModelSpace entity count equals target ModelSpace entity count.
-   - PaperSpace count is expected.
-   - AutoCAD `ZOOM EXTENTS` shows the full drawing.
-   - Title block, BOM, dimensions, text, and block inserts visually match.
-6. For screen-recorded demos, use batch mode:
+4. **Create a video-friendly redraw when needed**
    ```powershell
    python path\to\scripts\dwg_redraw.py --source input.dwg --output outputs\redraw_recorded.dwg --batch-size 22 --step-delay 0.45 --record
    ```
+5. **Validate**
+   Compare source and target entity counts. Use the exact redraw as the deliverable. Use the recorded redraw as video material.
+
+## Redraw Prompt Standard
+
+Every generated custom prompt must include:
+
+- File identity: source file name, DWG version if known, entity counts, and ModelSpace/PaperSpace counts.
+- Drawing classification: part drawing, assembly drawing, layout/title-block drawing, or unknown.
+- Required workflow: exact mode for final delivery; batch mode only for visible redraw videos.
+- Environment assumptions: Windows, AutoCAD, Python, COM, and required Python packages.
+- Layer table: layer names, colors, linetypes, and lineweights when available.
+- Style table: text styles and dimension styles when available.
+- Block inventory: block names, especially title blocks, BOM tables, datum symbols, surface finish symbols, and custom annotation blocks.
+- Entity distribution: counts by AutoCAD object type and by space.
+- Extraction requirements: DXFOUT/DATAEXTRACTION/LIST instructions when generated source code is requested.
+- Validation criteria: source-target entity count comparison, visual check with ZOOM EXTENTS, and title block/BOM/block verification.
+- Known risks: legacy encodings, SHX fonts, associative annotations, nested blocks, xrefs, proxy objects, and batch-copy duplicate dependencies.
+
+Use `references/prompt-template.md` as the template when composing the custom prompt manually. Prefer `scripts/dwg_prompt_builder.py` when AutoCAD COM is available.
 
 ## Choosing A Mode
 
@@ -60,7 +83,13 @@ Use `references/prompt-template.md` for a compact prompt template when generatin
 
 ## Bundled Script
 
-Use `scripts/dwg_redraw.py` for deterministic AutoCAD COM workflows:
+Use `scripts/dwg_prompt_builder.py` to generate a drawing-specific prompt:
+
+```powershell
+python scripts\dwg_prompt_builder.py --source input.dwg --output input-redraw-prompt.md
+```
+
+Use `scripts/dwg_redraw.py` for deterministic AutoCAD COM redraw workflows:
 
 ```powershell
 python scripts\dwg_redraw.py --source input.dwg --output outputs\redraw_exact.dwg --exact
