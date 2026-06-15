@@ -34,7 +34,9 @@ When the user provides only a DWG, follow this repeatable flow:
    ```powershell
    python path\to\scripts\dwg_redraw.py --source input.dwg --output outputs\redraw_recorded.dwg --batch-size 22 --step-delay 0.45 --record
    ```
-5. **Validate**
+5. **If using an external recorder**
+   Start the recorder before running batch redraw, confirm that the recording timer is moving, and stop it immediately after redraw finishes. The recorder, AutoCAD, and automation runner should use the same privilege level. If the recorder is running as administrator while Codex/Python is not, Windows may block automated stop clicks and hotkeys; stop the recorder manually and verify the MP4 can be opened.
+6. **Validate**
    Compare source and target entity counts. Use the exact redraw as the deliverable. Use the recorded redraw as video material.
 
 ## Redraw Prompt Standard
@@ -71,6 +73,8 @@ Use `references/prompt-template.md` as the template when composing the custom pr
 - Do not overwrite the source DWG. Always write to a new output path.
 - Use `--exact` for authoritative output even if a separate recorded batch version is created.
 - External screen recorders are acceptable for production videos. Start the recorder and confirm recording before running `dwg_redraw.py`; use built-in `--record` only when a lightweight MP4 capture is sufficient.
+- When an external MP4 reports `moov atom not found`, the recorder has not finalized the file or was closed incorrectly. Keep the recorder open, click its Stop button, wait for disk writes to finish, then verify the file with ffmpeg before delivering it.
+- Do not run AutoCAD or the external recorder elevated unless Python/Codex is elevated as well. Mixed privilege levels can prevent automated hotkeys/clicks and leave AutoCAD COM in a state where `Documents.Add`, `Documents.Open`, or `Visible` are unavailable.
 
 ## Source Data Extraction
 

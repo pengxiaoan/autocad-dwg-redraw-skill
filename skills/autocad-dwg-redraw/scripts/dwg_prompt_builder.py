@@ -34,7 +34,10 @@ def connect_autocad():
     except Exception:
         acad = win32com.client.Dispatch("AutoCAD.Application")
         print("Started AutoCAD.")
-    acad.Visible = True
+    try:
+        acad.Visible = True
+    except Exception as exc:
+        print(f"Warning: could not set AutoCAD visible: {exc}")
     return acad
 
 

@@ -37,7 +37,10 @@ def connect_autocad():
     except Exception:
         acad = win32com.client.Dispatch("AutoCAD.Application")
         print("Started AutoCAD.")
-    acad.Visible = True
+    try:
+        acad.Visible = True
+    except Exception as exc:
+        print(f"Warning: could not set AutoCAD visible: {exc}")
     try:
         acad.WindowState = 3
     except Exception:
@@ -63,7 +66,10 @@ def connect_or_restart_autocad(restart: bool = False, acad_exe: str | None = Non
     except Exception:
         acad = win32com.client.Dispatch("AutoCAD.Application")
         print("Started AutoCAD.")
-    acad.Visible = True
+    try:
+        acad.Visible = True
+    except Exception as exc:
+        print(f"Warning: could not set AutoCAD visible: {exc}")
     try:
         acad.WindowState = 3
     except Exception:
