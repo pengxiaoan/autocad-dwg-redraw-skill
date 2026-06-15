@@ -45,17 +45,60 @@ def connect_autocad():
     return acad
 
 
+def restart_autocad(acad_exe: str | None = None, wait: float = 15.0):
+    subprocess.run(["taskkill", "/IM", "acad.exe", "/F"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    time.sleep(3)
+    if acad_exe:
+        subprocess.Popen([acad_exe])
+        time.sleep(wait)
+    return connect_autocad()
+
+
+def connect_or_restart_autocad(restart: bool = False, acad_exe: str | None = None):
+    if restart:
+        return restart_autocad(acad_exe=acad_exe)
+    try:
+        acad = win32com.client.GetActiveObject("AutoCAD.Application")
+        print("Connected to running AutoCAD.")
+    except Exception:
+        acad = win32com.client.Dispatch("AutoCAD.Application")
+        print("Started AutoCAD.")
+    acad.Visible = True
+    try:
+        acad.WindowState = 3
+    except Exception:
+        pass
+    return acad
+
+
 def find_or_open_document(acad, source_path: Path):
     source_path = source_path.resolve()
-    count = com_retry(lambda: acad.Documents.Count)
-    for index in range(count):
-        doc = com_retry(lambda idx=index: acad.Documents.Item(idx))
-        full_name = str(getattr(doc, "FullName", "") or "")
+    try:
+        count = com_retry(lambda: acad.Documents.Count)
+        for index in range(count):
+            doc = com_retry(lambda idx=index: acad.Documents.Item(idx))
+            full_name = str(getattr(doc, "FullName", "") or "")
+            if full_name.lower() == str(source_path).lower():
+                print(f"Found source drawing: {doc.Name}")
+                return doc
+    except Exception:
+        active = com_retry(lambda: acad.ActiveDocument)
+        full_name = str(getattr(active, "FullName", "") or "")
         if full_name.lower() == str(source_path).lower():
-            print(f"Found source drawing: {doc.Name}")
-            return doc
+            print(f"Using active source drawing: {active.Name}")
+            return active
+        com_retry(lambda: active.ModelSpace.Count)
+        print(f"Using readable active source drawing: {active.Name}")
+        return active
     print(f"Opening source drawing: {source_path}")
-    return com_retry(lambda: acad.Documents.Open(str(source_path)))
+    try:
+        com_retry(lambda: acad.Documents.Open(str(source_path)))
+        return com_retry(lambda: acad.ActiveDocument)
+    except Exception:
+        active = com_retry(lambda: acad.ActiveDocument)
+        com_retry(lambda: active.ModelSpace.Count)
+        print(f"Using readable active source drawing after open fallback: {active.Name}")
+        return active
 
 
 def start_screen_recorder(output_root: Path, fps: float, scale: float):
@@ -180,6 +223,8 @@ def main() -> int:
     parser.add_argument("--step-delay", type=float, default=0.45, help="Delay between visible redraw batches.")
     parser.add_argument("--use-active-target", action="store_true", help="Use current active drawing as target.")
     parser.add_argument("--prepare-only", action="store_true", help="Open source and blank target, then stop.")
+    parser.add_argument("--restart-autocad", action="store_true", help="Restart AutoCAD before opening the source DWG.")
+    parser.add_argument("--acad-exe", help="Optional acad.exe path used with --restart-autocad.")
     parser.add_argument("--record", action="store_true", help="Record screen during redraw.")
     parser.add_argument("--record-fps", type=float, default=2.0, help="Recording frames per second.")
     parser.add_argument("--record-scale", type=float, default=0.5, help="Recording scale factor.")
@@ -203,7 +248,7 @@ def main() -> int:
     if not source_path.exists():
         raise FileNotFoundError(f"Source DWG not found: {source_path}")
 
-    acad = connect_autocad()
+    acad = connect_or_restart_autocad(restart=args.restart_autocad, acad_exe=args.acad_exe)
     source_doc = find_or_open_document(acad, source_path)
 
     if args.use_active_target and acad.ActiveDocument.FullName.lower() != str(source_path).lower():

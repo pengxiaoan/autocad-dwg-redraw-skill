@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -37,15 +38,44 @@ def connect_autocad():
     return acad
 
 
+def restart_autocad(acad_exe: str | None = None, wait: float = 15.0):
+    subprocess.run(["taskkill", "/IM", "acad.exe", "/F"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    time.sleep(3)
+    if acad_exe:
+        subprocess.Popen([acad_exe])
+        time.sleep(wait)
+    return connect_autocad()
+
+
+def connect_or_restart_autocad(restart: bool = False, acad_exe: str | None = None):
+    if restart:
+        return restart_autocad(acad_exe=acad_exe)
+    return connect_autocad()
+
+
 def find_or_open_document(acad, source_path: Path):
     source_path = source_path.resolve()
-    count = com_retry(lambda: acad.Documents.Count)
-    for index in range(count):
-        doc = com_retry(lambda idx=index: acad.Documents.Item(idx))
-        full_name = str(getattr(doc, "FullName", "") or "")
+    try:
+        count = com_retry(lambda: acad.Documents.Count)
+        for index in range(count):
+            doc = com_retry(lambda idx=index: acad.Documents.Item(idx))
+            full_name = str(getattr(doc, "FullName", "") or "")
+            if full_name.lower() == str(source_path).lower():
+                return doc
+    except Exception:
+        active = com_retry(lambda: acad.ActiveDocument)
+        full_name = str(getattr(active, "FullName", "") or "")
         if full_name.lower() == str(source_path).lower():
-            return doc
-    return com_retry(lambda: acad.Documents.Open(str(source_path)))
+            return active
+        com_retry(lambda: active.ModelSpace.Count)
+        return active
+    try:
+        com_retry(lambda: acad.Documents.Open(str(source_path)))
+        return com_retry(lambda: acad.ActiveDocument)
+    except Exception:
+        active = com_retry(lambda: acad.ActiveDocument)
+        com_retry(lambda: active.ModelSpace.Count)
+        return active
 
 
 def safe_get(obj, attr: str, default=""):
@@ -226,6 +256,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Generate a standardized DWG redraw custom prompt.")
     parser.add_argument("--source", required=True, help="Source DWG file.")
     parser.add_argument("--output", help="Output Markdown prompt path.")
+    parser.add_argument("--restart-autocad", action="store_true", help="Restart AutoCAD before opening the source DWG.")
+    parser.add_argument("--acad-exe", help="Optional acad.exe path used with --restart-autocad.")
     args = parser.parse_args()
 
     source_path = Path(args.source).resolve()
@@ -235,7 +267,7 @@ def main() -> int:
     output_path = Path(args.output).resolve() if args.output else source_path.with_name(f"{source_path.stem}-redraw-prompt.md")
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    acad = connect_autocad()
+    acad = connect_or_restart_autocad(restart=args.restart_autocad, acad_exe=args.acad_exe)
     doc = find_or_open_document(acad, source_path)
     model_total, entity_counts, layer_counts = collect_entity_counts(doc.ModelSpace)
     paper_total = com_retry(lambda: doc.PaperSpace.Count)

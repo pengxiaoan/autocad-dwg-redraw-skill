@@ -22,13 +22,13 @@ When the user provides only a DWG, follow this repeatable flow:
 
 1. **Profile the source DWG**
    ```powershell
-   python path\to\scripts\dwg_prompt_builder.py --source input.dwg --output input-redraw-prompt.md
+   python path\to\scripts\dwg_prompt_builder.py --source input.dwg --output input-redraw-prompt.md --restart-autocad --acad-exe "C:\Path\To\acad.exe"
    ```
 2. **Review the generated custom prompt**
    Confirm drawing name, entity counts, layers, blocks, text styles, dimension styles, and risk notes.
 3. **Create the final accurate redraw**
    ```powershell
-   python path\to\scripts\dwg_redraw.py --source input.dwg --output outputs\redraw_exact.dwg --exact
+   python path\to\scripts\dwg_redraw.py --source input.dwg --output outputs\redraw_exact.dwg --exact --restart-autocad --acad-exe "C:\Path\To\acad.exe"
    ```
 4. **Create a video-friendly redraw when needed**
    ```powershell
@@ -64,9 +64,13 @@ Use `references/prompt-template.md` as the template when composing the custom pr
 ## AutoCAD Stability Notes
 
 - If AutoCAD COM returns "call was rejected by callee" or document collections become unreadable, wait briefly and retry. If it persists, close extra AutoCAD windows and restart AutoCAD.
+- If AutoCAD opens only the Start page or `Documents.Count`, `ActiveDocument.Name`, `Documents.Open`, or `ModelSpace` fails with `<unknown>`, use `--restart-autocad --acad-exe "path\to\acad.exe"` so the script starts from a clean AutoCAD process.
+- Some AutoCAD versions return a method proxy such as `<COMObject Open>` from `Documents.Open()` instead of a document object. After opening, use `ActiveDocument` and verify `ActiveDocument.ModelSpace.Count`.
+- For legacy DWGs, let AutoCAD finish loading before reading COM collections. If the window title changes but COM is not ready, wait and retry or restart.
 - Old DWGs may use legacy encodings and custom SHX fonts. Preserve source entities rather than recreating text by guessing.
 - Do not overwrite the source DWG. Always write to a new output path.
 - Use `--exact` for authoritative output even if a separate recorded batch version is created.
+- External screen recorders are acceptable for production videos. Start the recorder and confirm recording before running `dwg_redraw.py`; use built-in `--record` only when a lightweight MP4 capture is sufficient.
 
 ## Source Data Extraction
 
@@ -87,12 +91,14 @@ Use `scripts/dwg_prompt_builder.py` to generate a drawing-specific prompt:
 
 ```powershell
 python scripts\dwg_prompt_builder.py --source input.dwg --output input-redraw-prompt.md
+python scripts\dwg_prompt_builder.py --source input.dwg --output input-redraw-prompt.md --restart-autocad --acad-exe "C:\Path\To\acad.exe"
 ```
 
 Use `scripts/dwg_redraw.py` for deterministic AutoCAD COM redraw workflows:
 
 ```powershell
 python scripts\dwg_redraw.py --source input.dwg --output outputs\redraw_exact.dwg --exact
+python scripts\dwg_redraw.py --source input.dwg --output outputs\redraw_exact.dwg --exact --restart-autocad --acad-exe "C:\Path\To\acad.exe"
 python scripts\dwg_redraw.py --source input.dwg --output outputs\redraw_recorded.dwg --batch-size 22 --step-delay 0.45 --record
 python scripts\dwg_redraw.py --source input.dwg --prepare-only
 ```

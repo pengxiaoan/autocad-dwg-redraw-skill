@@ -43,10 +43,22 @@ Generate a drawing-specific custom redraw prompt:
 python skills\autocad-dwg-redraw\scripts\dwg_prompt_builder.py --source input.dwg --output input-redraw-prompt.md
 ```
 
+If AutoCAD is stuck on the Start page or COM document access fails, restart AutoCAD cleanly:
+
+```powershell
+python skills\autocad-dwg-redraw\scripts\dwg_prompt_builder.py --source input.dwg --output input-redraw-prompt.md --restart-autocad --acad-exe "C:\Path\To\acad.exe"
+```
+
 Final accurate redraw:
 
 ```powershell
 python skills\autocad-dwg-redraw\scripts\dwg_redraw.py --source input.dwg --output outputs\redraw_exact.dwg --exact
+```
+
+Clean AutoCAD restart plus exact redraw:
+
+```powershell
+python skills\autocad-dwg-redraw\scripts\dwg_redraw.py --source input.dwg --output outputs\redraw_exact.dwg --exact --restart-autocad --acad-exe "C:\Path\To\acad.exe"
 ```
 
 Recorded redraw demo:
@@ -72,3 +84,7 @@ No personal DWG files, recordings, or local machine paths are included in this r
 4. Run `dwg_redraw.py --exact` for the final deliverable.
 5. Run `dwg_redraw.py --record` for the visible video demo.
 6. Treat the exact redraw as the authoritative output; use the recorded redraw only as video material if batch mode creates extra dependent blocks.
+
+## External Recorder Workflow
+
+For production recording, start a third-party recorder first, confirm it is recording, then run the redraw command. Keep the skill's built-in `--record` for lightweight automated MP4 capture.
