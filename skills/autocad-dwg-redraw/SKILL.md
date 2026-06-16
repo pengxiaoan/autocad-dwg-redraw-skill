@@ -1,6 +1,6 @@
 ---
 name: autocad-dwg-redraw
-description: Create standardized custom redraw prompts for AutoCAD DWG files, then rebuild, validate, and screen-record DWG redraws using AutoCAD COM automation. Use when Codex is given any source .dwg and must profile it, generate a drawing-specific redraw prompt, reproduce it as a new DWG, compare entity counts, or create a video-friendly redraw demo.
+description: Create standardized custom redraw prompts for AutoCAD DWG files, then rebuild and validate DWGs using AutoCAD COM automation. Use when Codex is given a source .dwg and must profile it, generate a drawing-specific redraw prompt, reproduce it as a new DWG, and compare geometry, annotation, layer, block, and entity counts.
 ---
 
 # AutoCAD DWG Redraw
@@ -8,36 +8,30 @@ description: Create standardized custom redraw prompts for AutoCAD DWG files, th
 Use this skill in two stages:
 
 1. Generate a standardized drawing-specific redraw prompt from a source DWG.
-2. Use that prompt and the bundled redraw script to rebuild, validate, and optionally record the DWG.
+2. Use that prompt and the bundled redraw script to rebuild and validate the DWG.
 
 ## Core Rule
 
 Do not infer a complex DWG from screenshots or visual style alone when the source DWG is available. First extract or copy actual source entities, then validate against the original.
 
-For final delivery, prefer exact entity copy. For videos, use batch redraw with delays, then clearly label it as a demonstration copy.
+For final delivery, prefer exact DWG entity copy through AutoCAD COM. Generated AutoLISP/Python reconstruction should only be used when the user specifically needs auditable source code and exact extracted entity data is available.
 
 ## Standard User Flow
 
-When the user provides only a DWG, follow this repeatable flow:
+When the user provides a DWG, follow this repeatable flow:
 
 1. **Profile the source DWG**
    ```powershell
    python path\to\scripts\dwg_prompt_builder.py --source input.dwg --output input-redraw-prompt.md --restart-autocad --acad-exe "C:\Path\To\acad.exe"
    ```
 2. **Review the generated custom prompt**
-   Confirm drawing name, entity counts, layers, blocks, text styles, dimension styles, and risk notes.
-3. **Create the final accurate redraw**
+   Confirm drawing name, entity counts, layer table, block inventory, text styles, dimension styles, annotation counts, and risk notes.
+3. **Create the accurate redraw**
    ```powershell
-   python path\to\scripts\dwg_redraw.py --source input.dwg --output outputs\redraw_exact.dwg --exact --restart-autocad --acad-exe "C:\Path\To\acad.exe"
+   python path\to\scripts\dwg_redraw.py --source input.dwg --output outputs\redraw_exact.dwg --restart-autocad --acad-exe "C:\Path\To\acad.exe"
    ```
-4. **Create a video-friendly redraw when needed**
-   ```powershell
-   python path\to\scripts\dwg_redraw.py --source input.dwg --output outputs\redraw_recorded.dwg --batch-size 22 --step-delay 0.45 --record
-   ```
-5. **If using an external recorder**
-   Start the recorder before running batch redraw, confirm that the recording timer is moving, and stop it immediately after redraw finishes. The recorder, AutoCAD, and automation runner should use the same privilege level. If the recorder is running as administrator while Codex/Python is not, Windows may block automated stop clicks and hotkeys; stop the recorder manually and verify the MP4 can be opened.
-6. **Validate**
-   Compare source and target entity counts. Use the exact redraw as the deliverable. Use the recorded redraw as video material.
+4. **Validate**
+   Compare source and target ModelSpace/PaperSpace entity counts, object-type distribution, dimension/leader counts, text/MTEXT counts, block references, layers, and visual layout.
 
 ## Redraw Prompt Standard
 
@@ -45,23 +39,26 @@ Every generated custom prompt must include:
 
 - File identity: source file name, DWG version if known, entity counts, and ModelSpace/PaperSpace counts.
 - Drawing classification: part drawing, assembly drawing, layout/title-block drawing, or unknown.
-- Required workflow: exact mode for final delivery; batch mode only for visible redraw videos.
-- Environment assumptions: Windows, AutoCAD, Python, COM, and required Python packages.
+- Required workflow: exact AutoCAD COM copy for final delivery; generated code only when exact extracted entity data is provided.
+- Environment assumptions: Windows, AutoCAD, Python, COM, and `pywin32`.
 - Layer table: layer names, colors, linetypes, and lineweights when available.
 - Style table: text styles and dimension styles when available.
+- Annotation inventory: dimension entities, leaders, text, MTEXT, tolerances, datum/surface-finish symbols, and any annotation blocks.
 - Block inventory: block names, especially title blocks, BOM tables, datum symbols, surface finish symbols, and custom annotation blocks.
 - Entity distribution: counts by AutoCAD object type and by space.
 - Extraction requirements: DXFOUT/DATAEXTRACTION/LIST instructions when generated source code is requested.
-- Validation criteria: source-target entity count comparison, visual check with ZOOM EXTENTS, and title block/BOM/block verification.
-- Known risks: legacy encodings, SHX fonts, associative annotations, nested blocks, xrefs, proxy objects, and batch-copy duplicate dependencies.
+- Validation criteria: source-target entity count comparison, dimension/leader comparison, visual check with ZOOM EXTENTS, and title block/BOM/block verification.
+- Known risks: legacy encodings, SHX fonts, associative annotations, annotative dimensions, nested blocks, xrefs, proxy objects, and layout-specific objects.
 
 Use `references/prompt-template.md` as the template when composing the custom prompt manually. Prefer `scripts/dwg_prompt_builder.py` when AutoCAD COM is available.
 
-## Choosing A Mode
+## Accuracy Requirements
 
-- **Exact mode (`--exact`)**: One copy operation for all ModelSpace entities. Use for final comparison and delivery. This avoids duplicate dependent blocks that can appear when associative leaders, dimensions, or custom blocks are copied in batches.
-- **Batch mode**: Copies entities in batches with pauses and viewport refreshes. Use for videos where the drawing should visibly appear over time. Validate afterward; batch mode may create one or more extra dependent block references in some drawings.
-- **Prepare-only pattern**: If a user wants the screen ready before drawing starts, create/open a blank target drawing first, wait for the user to say "start", then run batch mode with `--use-active-target`.
+- Copy ModelSpace entities and PaperSpace entities unless the user explicitly requests ModelSpace only.
+- Preserve dimensions, leaders, text, MTEXT, hatches, blocks, layers, linetypes, colors, lineweights, text styles, and dimension styles.
+- Treat missing dimensions or leaders as a validation failure when the source contains them.
+- Do not overwrite the source DWG. Always write to a new output path.
+- If a drawing uses xrefs, proxy objects, custom objects, or annotative dimensions, report the risk and validate visually in AutoCAD.
 
 ## AutoCAD Stability Notes
 
@@ -70,11 +67,6 @@ Use `references/prompt-template.md` as the template when composing the custom pr
 - Some AutoCAD versions return a method proxy such as `<COMObject Open>` from `Documents.Open()` instead of a document object. After opening, use `ActiveDocument` and verify `ActiveDocument.ModelSpace.Count`.
 - For legacy DWGs, let AutoCAD finish loading before reading COM collections. If the window title changes but COM is not ready, wait and retry or restart.
 - Old DWGs may use legacy encodings and custom SHX fonts. Preserve source entities rather than recreating text by guessing.
-- Do not overwrite the source DWG. Always write to a new output path.
-- Use `--exact` for authoritative output even if a separate recorded batch version is created.
-- External screen recorders are acceptable for production videos. Start the recorder and confirm recording before running `dwg_redraw.py`; use built-in `--record` only when a lightweight MP4 capture is sufficient.
-- When an external MP4 reports `moov atom not found`, the recorder has not finalized the file or was closed incorrectly. Keep the recorder open, click its Stop button, wait for disk writes to finish, then verify the file with ffmpeg before delivering it.
-- Do not run AutoCAD or the external recorder elevated unless Python/Codex is elevated as well. Mixed privilege levels can prevent automated hotkeys/clicks and leave AutoCAD COM in a state where `Documents.Add`, `Documents.Open`, or `Visible` are unavailable.
 
 ## Source Data Extraction
 
@@ -89,7 +81,7 @@ When exact entity copy is not acceptable and the user truly needs generated sour
 
 Use `references/prompt-template.md` for a compact prompt template when generating AutoLISP or Python redraw code from extracted data.
 
-## Bundled Script
+## Bundled Scripts
 
 Use `scripts/dwg_prompt_builder.py` to generate a drawing-specific prompt:
 
@@ -98,13 +90,12 @@ python scripts\dwg_prompt_builder.py --source input.dwg --output input-redraw-pr
 python scripts\dwg_prompt_builder.py --source input.dwg --output input-redraw-prompt.md --restart-autocad --acad-exe "C:\Path\To\acad.exe"
 ```
 
-Use `scripts/dwg_redraw.py` for deterministic AutoCAD COM redraw workflows:
+Use `scripts/dwg_redraw.py` for deterministic AutoCAD COM redraw and validation:
 
 ```powershell
-python scripts\dwg_redraw.py --source input.dwg --output outputs\redraw_exact.dwg --exact
-python scripts\dwg_redraw.py --source input.dwg --output outputs\redraw_exact.dwg --exact --restart-autocad --acad-exe "C:\Path\To\acad.exe"
-python scripts\dwg_redraw.py --source input.dwg --output outputs\redraw_recorded.dwg --batch-size 22 --step-delay 0.45 --record
-python scripts\dwg_redraw.py --source input.dwg --prepare-only
+python scripts\dwg_redraw.py --source input.dwg --output outputs\redraw_exact.dwg
+python scripts\dwg_redraw.py --source input.dwg --output outputs\redraw_exact.dwg --restart-autocad --acad-exe "C:\Path\To\acad.exe"
+python scripts\dwg_redraw.py --source input.dwg --output outputs\redraw_modelspace_only.dwg --modelspace-only
 ```
 
-The script requires Windows, AutoCAD, Python 3.10+, and `pywin32`. Recording additionally uses `mss`, `imageio`, `imageio-ffmpeg`, and `numpy`.
+The scripts require Windows, AutoCAD, Python 3.10+, and `pywin32`.

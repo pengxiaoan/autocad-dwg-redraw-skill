@@ -1,8 +1,4 @@
-"""Generate a standardized custom redraw prompt for a source AutoCAD DWG.
-
-The script profiles a DWG through AutoCAD COM and writes a Markdown prompt that
-can be used with the AutoCAD DWG Redraw skill.
-"""
+"""Generate a standardized custom redraw prompt for a source AutoCAD DWG."""
 
 from __future__ import annotations
 
@@ -16,7 +12,10 @@ from pathlib import Path
 import win32com.client
 
 
-def com_retry(action, attempts: int = 20, delay: float = 0.35):
+ANNOTATION_TYPES = ("Dimension", "Leader", "Text", "MText", "Tolerance")
+
+
+def com_retry(action, attempts: int = 30, delay: float = 0.4):
     last_error = None
     for _ in range(attempts):
         try:
@@ -51,9 +50,7 @@ def restart_autocad(acad_exe: str | None = None, wait: float = 15.0):
 
 
 def connect_or_restart_autocad(restart: bool = False, acad_exe: str | None = None):
-    if restart:
-        return restart_autocad(acad_exe=acad_exe)
-    return connect_autocad()
+    return restart_autocad(acad_exe=acad_exe) if restart else connect_autocad()
 
 
 def find_or_open_document(acad, source_path: Path):
@@ -64,21 +61,17 @@ def find_or_open_document(acad, source_path: Path):
             doc = com_retry(lambda idx=index: acad.Documents.Item(idx))
             full_name = str(getattr(doc, "FullName", "") or "")
             if full_name.lower() == str(source_path).lower():
+                com_retry(lambda: doc.ModelSpace.Count, attempts=40, delay=0.5)
                 return doc
     except Exception:
         active = com_retry(lambda: acad.ActiveDocument)
-        full_name = str(getattr(active, "FullName", "") or "")
-        if full_name.lower() == str(source_path).lower():
-            return active
-        com_retry(lambda: active.ModelSpace.Count)
+        com_retry(lambda: active.ModelSpace.Count, attempts=40, delay=0.5)
         return active
-    try:
-        com_retry(lambda: acad.Documents.Open(str(source_path)))
-        return com_retry(lambda: acad.ActiveDocument)
-    except Exception:
-        active = com_retry(lambda: acad.ActiveDocument)
-        com_retry(lambda: active.ModelSpace.Count)
-        return active
+
+    com_retry(lambda: acad.Documents.Open(str(source_path)), attempts=5, delay=2.0)
+    opened = com_retry(lambda: acad.ActiveDocument)
+    com_retry(lambda: opened.ModelSpace.Count, attempts=60, delay=0.5)
+    return opened
 
 
 def safe_get(obj, attr: str, default=""):
@@ -131,16 +124,26 @@ def collect_entity_counts(space):
     return total, counts, layers
 
 
+def annotation_total(counts: collections.Counter) -> int:
+    return sum(count for name, count in counts.items() if any(token in name for token in ANNOTATION_TYPES))
+
+
+def dimension_total(counts: collections.Counter) -> int:
+    return sum(count for name, count in counts.items() if "Dimension" in name or "Leader" in name)
+
+
 def classify_drawing(block_names, entity_counts):
     upper_blocks = [name.upper() for name in block_names]
-    has_bom = any("BOM" in name or "BILL" in name or "明细" in name for name in upper_blocks)
+    has_bom = any("BOM" in name or "BILL" in name for name in upper_blocks)
     has_title = any("A0" in name or "A1" in name or "A2" in name or "A3" in name or "TITLE" in name for name in upper_blocks)
-    has_many_blocks = sum(entity_counts.values()) and entity_counts.get("AcDbBlockReference", 0) > 20
+    has_dimensions = dimension_total(entity_counts) > 0
     if has_bom:
-        return "装配图", "检测到 BOM/明细栏相关块，通常表示装配图。"
-    if has_title and has_many_blocks:
-        return "工程图/布局图", "检测到图框块和较多块引用。"
-    return "未知或零件图", "未检测到明确 BOM 线索，需要人工复核标题栏和视图内容。"
+        return "assembly or layout drawing", "BOM-related block names were detected."
+    if has_title:
+        return "layout sheet or manufacturing drawing", "Title-block-like block names were detected."
+    if has_dimensions:
+        return "manufacturing/detail drawing", "Dimension or leader entities were detected."
+    return "unknown or geometry-only drawing", "No clear BOM, title block, or dimension signal was detected."
 
 
 def markdown_table(headers, rows):
@@ -161,73 +164,69 @@ def render_prompt(source_path, doc, layers, text_styles, dim_styles, blocks, mod
     style_rows = [{"TextStyle": name} for name in text_styles]
     dim_rows = [{"DimStyle": name} for name in dim_styles]
 
-    return f"""# {basename} 重绘提示词定制版
+    return f"""# {basename} Custom DWG Redraw Prompt
 
-## 1. 图纸指纹
+## 1. Drawing Fingerprint
 
-- 源 DWG：`{source_path.name}`
-- 文件大小：{file_size} bytes
-- AutoCAD 文档名：`{safe_get(doc, "Name")}`
-- ModelSpace 实体数：{model_total}
-- PaperSpace 实体数：{paper_total}
-- 初步分类：{classification}
-- 分类依据：{reason}
+- Source DWG: `{source_path.name}`
+- File size: {file_size} bytes
+- AutoCAD document name: `{safe_get(doc, "Name")}`
+- ModelSpace entity count: {model_total}
+- PaperSpace entity count: {paper_total}
+- Initial classification: {classification}
+- Classification reason: {reason}
+- Dimension/leader count: {dimension_total(entity_counts)}
+- Annotation count: {annotation_total(entity_counts)}
 
-## 2. 标准重绘策略
+## 2. Required Redraw Strategy
 
-- 最终交付必须使用精确模式：一次性复制全部 ModelSpace 实体，避免分批复制导致关联标注或依赖块重复。
-- 视频演示可以使用逐批模式，但逐批结果只作为录屏素材，不作为最终验收 DWG。
-- 不覆盖源 DWG，所有输出写入 `outputs/` 或用户指定目录。
-- 如果需要生成 AutoLISP/Python 源码，而不是复制实体，必须先导出 DXF 或 DATAEXTRACTION 表，再按实体坐标逐条生成代码。
+- Use exact AutoCAD COM entity copy for the final deliverable.
+- Copy ModelSpace and PaperSpace unless the user explicitly requests ModelSpace only.
+- Do not omit dimensions, leaders, text, MTEXT, hatches, block references, title blocks, or BOM/detail tables.
+- Do not overwrite the source DWG; write all outputs to `outputs/` or another user-specified directory.
+- If generated AutoLISP/Python source code is required, first extract exact entity data with DXFOUT or DATAEXTRACTION.
 
-## 3. 推荐执行命令
+## 3. Recommended Commands
 
-最终精确重绘：
-
-```powershell
-python scripts\\dwg_redraw.py --source "{source_path.name}" --output "outputs\\{basename}_最终精确重绘.dwg" --exact
-```
-
-录屏逐批重绘：
+Generate this custom prompt:
 
 ```powershell
-python scripts\\dwg_redraw.py --source "{source_path.name}" --output "outputs\\{basename}_逐批重绘_recorded.dwg" --batch-size 22 --step-delay 0.45 --record
+python scripts\\dwg_prompt_builder.py --source "{source_path.name}" --output "outputs\\{basename}-redraw-prompt.md"
 ```
 
-先打开空白页面，等待用户输入开始：
+Create the validated redraw:
 
 ```powershell
-python scripts\\dwg_redraw.py --source "{source_path.name}" --prepare-only
-python scripts\\dwg_redraw.py --source "{source_path.name}" --output "outputs\\{basename}_等待后开始_recorded.dwg" --use-active-target --batch-size 22 --step-delay 0.45 --record
+python scripts\\dwg_redraw.py --source "{source_path.name}" --output "outputs\\{basename}_redraw_exact.dwg" --restart-autocad --acad-exe "C:\\Path\\To\\acad.exe"
 ```
 
-## 4. 图层清单
+## 4. Layers
 
 {markdown_table(["name", "color", "linetype", "lineweight"], layers)}
 
-## 5. 实体类型分布
+## 5. Entity Type Distribution
 
 {markdown_table(["ObjectName", "Count"], entity_rows)}
 
-## 6. 实体所在图层分布
+## 6. Entity Layer Distribution
 
 {markdown_table(["Layer", "EntityCount"], layer_count_rows)}
 
-## 7. 块清单
+## 7. Blocks
 
 {markdown_table(["BlockName"], block_rows)}
 
-## 8. 文字样式
+## 8. Text Styles
 
 {markdown_table(["TextStyle"], style_rows)}
 
-## 9. 标注样式
+## 9. Dimension Styles
 
 {markdown_table(["DimStyle"], dim_rows)}
 
-## 10. 如果需要代码级重绘，必须补充的数据
+## 10. Data Required For Code-Level Redraw
 
-在 AutoCAD 中执行：
+Run these AutoCAD commands when exact generated code is required:
 
 ```text
 DXFOUT
@@ -238,20 +237,24 @@ DATAEXTRACTION
 LIST
 ```
 
-并补充：
+Extract:
 
-- 所有 LINE/LWPOLYLINE/CIRCLE/ARC/TEXT/MTEXT/HATCH/DIMENSION 的精确坐标。
-- 所有块定义和块插入属性。
-- 标题栏、明细栏、粗糙度、基准、形位公差的块名、插入点、旋转角、属性值。
-- 旧版 DWG 的字体编码、SHX 字体、大字体设置。
+- Exact coordinates for LINE/LWPOLYLINE/CIRCLE/ARC/TEXT/MTEXT/HATCH/DIMENSION entities.
+- Dimension type, definition points, text location, style, scale, precision, and overrides.
+- Leader vertices, arrowheads, annotation text, and attached blocks.
+- Block definitions, insertion points, scale, rotation, and attributes.
+- Title block, BOM/detail table, tolerance, datum, and surface finish symbols.
+- Legacy SHX font and big-font settings.
 
-## 11. 验证标准
+## 11. Validation Criteria
 
-- 源图 ModelSpace 实体数 = 最终精确重绘图 ModelSpace 实体数 = {model_total}
-- PaperSpace 实体数符合预期 = {paper_total}
-- `ZOOM EXTENTS` 后图形完整可见。
-- 标题栏、明细栏、块插入、文字、标注、中心线、虚线和剖面线视觉一致。
-- 如果逐批录屏版实体数不同，使用精确版作为最终交付。
+- Source ModelSpace entity count equals target ModelSpace entity count: {model_total}
+- Source PaperSpace entity count equals target PaperSpace entity count: {paper_total}
+- Source dimension/leader count equals target dimension/leader count: {dimension_total(entity_counts)}
+- Source annotation count equals target annotation count: {annotation_total(entity_counts)}
+- Object type distribution matches source.
+- `ZOOM EXTENTS` shows the complete drawing.
+- Title block, BOM/detail tables, dimensions, leaders, text, MTEXT, centerlines, hidden lines, and section lines visually match.
 """
 
 

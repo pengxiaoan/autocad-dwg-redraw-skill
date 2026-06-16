@@ -18,45 +18,52 @@ Every custom prompt must use this structure:
    - ModelSpace entity count
    - PaperSpace entity count
    - Object type distribution
+   - Dimension/leader count
+   - Annotation count
 2. **Drawing classification**
-   - Part drawing / assembly drawing / layout sheet / unknown
-   - Reasoning based on blocks, BOM names, title blocks, dimensions, and symbols
+   - Part drawing / assembly drawing / layout sheet / manufacturing drawing / unknown
+   - Reasoning based on blocks, BOM names, title blocks, dimensions, leaders, and symbols
 3. **Global redraw policy**
-   - `--exact` is mandatory for final delivery
-   - batch redraw is only for visible video demos
-   - never overwrite the source DWG
+   - Use exact AutoCAD COM copy for final delivery
+   - Never overwrite the source DWG
+   - Preserve dimensions, leaders, annotations, blocks, layers, and layouts
 4. **Environment**
    - Windows + AutoCAD
    - Python 3.10+
    - pywin32
-   - recording dependencies if needed
 5. **Layer inventory**
    - name, color, linetype, lineweight
 6. **Style inventory**
    - text styles
    - dimension styles
-7. **Block inventory**
+7. **Annotation inventory**
+   - dimensions
+   - leaders
+   - text / MTEXT
+   - datum, tolerance, and surface finish symbols
+8. **Block inventory**
    - title blocks
    - BOM/detail table blocks
    - surface finish symbols
    - datum/tolerance symbols
    - custom annotation blocks
-8. **Entity extraction plan**
+9. **Entity extraction plan**
    - DXFOUT
    - DATAEXTRACTION
    - LIST
    - LAYER/STYLE/DIMSTYLE listing
-9. **Execution commands**
-   - exact redraw command
-   - recorded redraw command
-   - prepare-only/start-later command
-10. **Validation**
-   - entity count equality
+10. **Execution commands**
+   - prompt generation command
+   - validated redraw command
+11. **Validation**
+   - ModelSpace entity equality
+   - PaperSpace entity equality
+   - dimension/leader equality
+   - annotation equality
    - visual `ZOOM EXTENTS` check
-   - title block/BOM/block/text check
-   - risk notes
+   - title block/BOM/block/text/dimension check
 
-## Required Source Data
+## Required Source Data For Code-Level Redraw
 
 Ask the user to extract these from AutoCAD before generating code:
 
@@ -73,7 +80,8 @@ Ask the user to extract these from AutoCAD before generating code:
   - `ARC`: center, radius, start angle, end angle.
   - `TEXT/MTEXT`: insertion point, content, height, rotation, style.
   - `HATCH`: boundary, pattern, scale, angle.
-  - Dimensions: type, definition points, text location.
+  - Dimensions: type, definition points, text location, style, scale, precision, overrides.
+  - Leaders: vertices, arrowheads, attached annotation, style.
 
 ## Prompt Skeleton
 
@@ -82,24 +90,26 @@ Ask the user to extract these from AutoCAD before generating code:
 You are a senior AutoCAD automation engineer and mechanical drafting specialist.
 
 # Task
-Create a custom redraw workflow for [DRAWING_NAME]. The output must match the source DWG in geometry, layers, dimensions, text, blocks, title block, and visible layout.
+Create a custom redraw workflow for [DRAWING_NAME]. The output must match the source DWG in geometry, layers, dimensions, leaders, text, blocks, title block, and visible layout.
 
 # Drawing Fingerprint
 - Source DWG: [FILE_NAME]
 - File size: [SIZE]
 - ModelSpace entity count: [COUNT]
 - PaperSpace entity count: [COUNT]
+- Dimension/leader count: [COUNT]
+- Annotation count: [COUNT]
 - Object type distribution:
 [OBJECT_TYPE_COUNTS]
 
 # Drawing Classification
-[PART / ASSEMBLY / LAYOUT / UNKNOWN]
+[PART / ASSEMBLY / LAYOUT / MANUFACTURING / UNKNOWN]
 [brief reason]
 
 # Global Redraw Policy
-- Use exact DWG entity copy for final delivery.
-- Use batch redraw only for screen-recorded demonstrations.
+- Use exact DWG entity copy for final delivery when AutoCAD is available.
 - Do not overwrite the source DWG.
+- Preserve dimensions, leaders, annotations, layers, blocks, and layouts.
 - Validate source and target entity counts.
 
 # Environment
@@ -130,25 +140,28 @@ Create a custom redraw workflow for [DRAWING_NAME]. The output must match the so
 [paste entity list grouped by layer]
 
 # Execution Commands
-Final exact redraw:
-python scripts\dwg_redraw.py --source "[FILE_NAME]" --output "outputs\[BASENAME]_exact.dwg" --exact
+Generate prompt:
+python scripts\dwg_prompt_builder.py --source "[FILE_NAME]" --output "outputs\[BASENAME]-redraw-prompt.md"
 
-Recorded redraw:
-python scripts\dwg_redraw.py --source "[FILE_NAME]" --output "outputs\[BASENAME]_recorded.dwg" --batch-size 22 --step-delay 0.45 --record
+Validated redraw:
+python scripts\dwg_redraw.py --source "[FILE_NAME]" --output "outputs\[BASENAME]_redraw_exact.dwg"
 
 # Requirements
 1. Do not omit entities.
-2. Use exact coordinates from the extracted data.
-3. Use existing layers/styles/blocks before drawing.
-4. Restore AutoCAD system variables after running.
-5. Print entity counts at the end.
-6. Add TODO comments only where the extracted source data is insufficient.
+2. Do not omit dimensions, leaders, text, MTEXT, title blocks, or BOM/detail tables.
+3. Use exact coordinates from the extracted data when generating code.
+4. Use existing layers/styles/blocks before drawing when generating code.
+5. Restore AutoCAD system variables after running generated code.
+6. Print entity, dimension, leader, and annotation counts at the end.
+7. Add TODO comments only where extracted source data is insufficient.
 
 # Validation
 - Source ModelSpace entity count must equal final target ModelSpace entity count.
+- Source PaperSpace entity count must equal final target PaperSpace entity count.
+- Source dimension/leader count must equal final target dimension/leader count.
+- Source annotation count must equal final target annotation count.
 - ZOOM EXTENTS must show the complete drawing.
-- Title block, BOM, dimensions, text, and custom blocks must visually match.
-- If batch redraw creates extra dependent blocks, use the exact redraw as the final deliverable.
+- Title block, BOM, dimensions, leaders, text, and custom blocks must visually match.
 ```
 
 ## Practical Guidance
