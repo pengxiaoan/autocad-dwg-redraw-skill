@@ -1,6 +1,6 @@
 # AutoCAD DWG Redraw Skill
 
-This repository contains a Codex skill for generating standardized DWG redraw prompts, rebuilding DWGs through AutoCAD COM, and validating entity, annotation, layer, block, and layout fidelity.
+This repository contains a Codex skill for generating standardized DWG redraw prompts, rebuilding DWGs through AutoCAD COM, and validating entity, annotation, layer, block, and layout fidelity. It also documents a PDF-derived workflow for converting PDF evidence into an intermediate DWG before using the same DWG validation flow.
 
 ## Install
 
@@ -29,6 +29,7 @@ Use $autocad-dwg-redraw. I will provide a DWG; generate a custom redraw prompt, 
 The skill includes:
 
 - A standard workflow for turning any source DWG into a custom redraw prompt.
+- A PDF-derived DWG workflow for cases where a PDF is available but the original DWG is not.
 - A workflow for exact DWG reconstruction through AutoCAD COM.
 - Validation for entity counts, object type distribution, dimensions, leaders, annotations, layers, blocks, and PaperSpace.
 - A reusable prompt builder at `skills/autocad-dwg-redraw/scripts/dwg_prompt_builder.py`.
@@ -71,14 +72,15 @@ No personal DWG files or local machine paths are included in this repository.
 
 ## Standard Process
 
-1. Provide a source `.dwg`.
+1. Provide a source `.dwg`, or convert a PDF into an auditable intermediate `.dwg`.
 2. Generate `*-redraw-prompt.md` with `dwg_prompt_builder.py`.
 3. Review the prompt's drawing fingerprint: entity count, layers, blocks, text styles, dimension styles, annotation counts, and object distribution.
 4. Run `dwg_redraw.py` for the final deliverable.
-5. Validate that the target has the same ModelSpace/PaperSpace entity counts, dimensions/leaders, annotations, and object type distribution as the source.
+5. Validate that the target has the same ModelSpace/PaperSpace entity counts, dimensions/leaders, annotations, and object type distribution as the source or intermediate DWG.
 
 ## Notes
 
 - AutoCAD must be installed on Windows.
 - Python requires `pywin32`.
+- PDF-derived DWGs should be reported as PDF-derived, not as exact copies of an unavailable original DWG.
 - For legacy DWGs, custom objects, proxy objects, xrefs, or annotative dimensions, run a visual review in AutoCAD after automated validation.
