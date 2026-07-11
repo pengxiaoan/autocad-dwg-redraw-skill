@@ -5,6 +5,8 @@ This repository contains two Codex skills:
 - `autocad-dwg-redraw`: exact, evidence-backed reconstruction when a source or intermediate DWG exists.
 - `autocad-image-redraw`: generalized raster image to DWG/DXF reconstruction with input preflight, evidence-aware specs, CAD output inspection, visual comparison, and iterative validation.
 
+Chinese tutorial: [图片自动绘制 DWG 使用教程](docs/图片自动绘制DWG使用教程.md)
+
 ## Install
 
 Install the skill from this repository:
