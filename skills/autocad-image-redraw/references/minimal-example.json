@@ -1,0 +1,23 @@
+{
+  "schema_version": "2.0",
+  "metadata": {
+    "source_image": "example.png",
+    "title": "minimal image redraw example",
+    "units": "mm",
+    "drawing_type": "part",
+    "profile": "hybrid",
+    "text_style": "CN_TEXT",
+    "accuracy_notes": ["Example only."]
+  },
+  "views": [{"id": "front", "source_roi": [0, 0, 1600, 1000], "cad_origin": [0, 0], "scale_group": "front"}],
+  "calibration": [{"id": "width-anchor", "view_id": "front", "method": "dimension-anchor", "source_points": [[100, 800], [1300, 800]], "cad_points": [[0, 0], [120, 0]], "value": 120, "units": "mm", "evidence_level": "known"}],
+  "entities": [
+    {"id": "outer", "view_id": "front", "type": "rectangle", "layer": "OBJECT", "p1": [0, 0], "p2": [120, 60], "evidence_level": "scaled", "source_refs": ["width-anchor"]},
+    {"id": "hole", "view_id": "front", "type": "circle", "layer": "OBJECT", "center": [30, 30], "radius": 6, "evidence_level": "known"},
+    {"id": "hole-center", "view_id": "front", "type": "center_mark", "layer": "CENTER", "center": [30, 30], "size": 18, "evidence_level": "scaled"},
+    {"id": "dim-width", "view_id": "front", "type": "linear_dimension", "layer": "DIM", "p1": [0, 0], "p2": [120, 0], "dimline": [60, -12], "text": "120", "angle": 0, "evidence_level": "known"},
+    {"id": "title", "view_id": "front", "type": "text", "layer": "TEXT", "text": "IMAGE REDRAW", "point": [0, 72], "height": 4, "evidence_level": "known"}
+  ],
+  "constraints": [{"id": "width-check", "type": "sum", "terms": [120], "expected": 120, "absolute_tolerance": 0.01, "evidence_level": "known"}],
+  "validation": {"required_layers": ["OBJECT", "DIM"], "visual_metrics_are_advisory": true}
+}
