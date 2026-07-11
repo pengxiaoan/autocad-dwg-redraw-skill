@@ -1,0 +1,4 @@
+interface:
+  display_name: "AutoCAD Image to DWG"
+  short_description: "Convert drawing images into validated DWG/DXF files."
+  default_prompt: "Use $autocad-image-redraw to preflight this raster reference, build and validate an evidence-aware redraw spec, generate an editable DWG/DXF, inspect the CAD output, compare it with the source image, and report uncertainties without claiming unsupported dimensional accuracy."
